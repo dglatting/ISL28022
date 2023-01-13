@@ -43,6 +43,11 @@
 #
 #
 # $Log: ISL28022.py,v $
+# Revision 1.8  2023/01/13 07:40:37  root
+# Equation variable values I used in _CurrentLSB and _CalRegVal were
+# reversed. This resulted in Current instability. There MAY still be
+# a problem with the Current measurement.
+#
 # Revision 1.7  2023/01/13 02:27:26  root
 # * Minor changes: both text and testing.
 #
@@ -70,7 +75,7 @@
 # Initial revision
 #
 
-ident = "$Id: ISL28022.py,v 1.7 2023/01/13 02:27:26 root Exp root $"
+ident = "$Id: ISL28022.py,v 1.8 2023/01/13 07:40:37 root Exp root $"
 
 
 import board
@@ -205,8 +210,8 @@ class ISL28022( object ):
 	
         # Calculate the calibration values and store them away.
         self._CurrentFS  = self._shunt_voltage / self._shunt_r
-        self._CurrentLSB = self._CurrentFS / math.pow( 2, 12 )
-        self._CalRegVal  = ( math.pow( 2, self._resolution( "PG" )) * 0.000010 ) / ( self._CurrentLSB * self._shunt_r )
+        self._CurrentLSB = self._CurrentFS / math.pow( 2, self._resolution( "PG" ))
+        self._CalRegVal  = ( math.pow( 2, 12 ) * 0.000010 ) / ( self._CurrentLSB * self._shunt_r )
 
         self._calib = ( int( self._CalRegVal ) & 0xfffe )
 
