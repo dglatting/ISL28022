@@ -46,6 +46,12 @@
 #
 #
 # $Log: ISL28022.py,v $
+# Revision 1.13  2023/01/13 21:26:58  root
+# Yet another minor text change.
+#
+# Revision 1.12  2023/01/13 21:26:19  root
+# Very minor text change.
+#
 # Revision 1.11  2023/01/13 21:14:40  root
 # Current calc was off by 1,000. Resistor spec is in *milli* Ohms.
 #
@@ -89,7 +95,7 @@
 # Initial revision
 #
 
-ident = "$Id: ISL28022.py,v 1.11 2023/01/13 21:14:40 root Exp root $"
+ident = "$Id: ISL28022.py,v 1.13 2023/01/13 21:26:58 root Exp root $"
 
 
 import board
@@ -377,7 +383,7 @@ class ISL28022( object ):
 
     def _converson_delay( self, reg ):
 
-        # When a conversion is requested, you have to FUCKING WAIT.
+        # When a conversion is requested, you have to WAIT.
 
         #  (Please give me c++ static const)
         _conversion_times = [ 0.000080, 0.000146, 0.000284, 0.000559,
