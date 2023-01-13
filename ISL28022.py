@@ -106,7 +106,7 @@ class ISL28022( object ):
                   full_scale=16,
                   # Voltage across the shunt.
                   shunt_voltage=0.320,
-                  # Shunt resistor in mOhms ( i.e., milli Ohms). 
+                  # Shunt resistor in mOhms (i.e., milli Ohms). 
                   shunt_resistor=5.0,
                   # Bus A/D averaging. Averaging of "0" means no
                   # averaging.
