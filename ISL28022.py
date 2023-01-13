@@ -29,23 +29,36 @@
 # Class to implement the Curious Electric DC Power Monitor ISL28022 in
 # Python. The ISL28022 data sheet can be found here:
 #  https://www.renesas.com/us/en/document/dst/isl28022-datasheet
-# As such, defaults are chosen and the code targeted toward this
+# As such, defaults are chosen and this code targeted to this
 # board. Most of the existing code I found on the Internet, both
 # Python and C++, sucked; so I'm adding this to the world's
 # suck-y-ness.
 #
-# Class depends on busio from Adafruit blinka. To install:
+# This class depends on busio from Adafruit blinka. To install:
 #  pip3 install adafruit-blinka
-# Why? Because that is where I plan to use this board.
+# Why? Because the Curious Electric board will be used in an
+# Adafruit/Seeed/Raspberry PI project.
 #
 # This code does not allow the configuration of the ISL28022 to be
-# changed on the fly, although it could. Most use cases are to set up
-# the device and run with it.
+# changed on the fly, although it could. Most IoT use cases are to set
+# up a device then run with it.
 #
-# Many functions are untested, such as triggered conversions.
+# Many functions of the ISP28022 here are untested, such as triggered
+# conversions. My use case is in a very active i2c environment where
+# power is polled at regular 5sec intervals where triggering MAY make
+# sense but I simply chose to read whatever is in the registers at
+# that moment. Interrupts and an external oscillator IS NOT supported
+# in the Curious Electric implementation of the ISL28022, which I
+# wouldn't use anyway.
 #
+# Just a note: In my lab, my primary revision control system is RCS
+# rather than git. RCS is "old school," as am I.
 #
 # $Log: ISL28022.py,v $
+# Revision 1.14  2023/01/13 22:10:49  root
+# * Updates to comments.
+# * Moved the delay loop in main().
+#
 # Revision 1.13  2023/01/13 21:26:58  root
 # Yet another minor text change.
 #
@@ -53,7 +66,8 @@
 # Very minor text change.
 #
 # Revision 1.11  2023/01/13 21:14:40  root
-# Current calc was off by 1,000. Resistor spec is in *milli* Ohms.
+# Current calc was off by 1,000. Resistor spec is in *milli*
+# Ohms. This fixed an apparent current measurement instability. Opps.
 #
 # Revision 1.10  2023/01/13 08:39:29  root
 # Added a "debug" parameter to several functions independent of the
@@ -95,7 +109,7 @@
 # Initial revision
 #
 
-ident = "$Id: ISL28022.py,v 1.13 2023/01/13 21:26:58 root Exp root $"
+ident = "$Id: ISL28022.py,v 1.14 2023/01/13 22:10:49 root Exp root $"
 
 
 import board
@@ -711,12 +725,13 @@ while True:
     print( "Current:       %+2.4f" % isl.current())
     print( "Power:         %+2.4f" % isl.power())
     print()
-    time.sleep( max( isl.bus_conversion_delay(),
-                     isl.shunt_conversion_delay(), 0.100 ))
-
+    
     isl.other_regs()
     print()
+
+    time.sleep( max( isl.bus_conversion_delay(),
+                     isl.shunt_conversion_delay(), 0.100 ))
     
 
 
-#  LocalWords:  busio Adafruit blinka MSB LSB
+#  LocalWords:  busio Adafruit blinka MSB LSB IoT
