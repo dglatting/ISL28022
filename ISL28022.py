@@ -23,6 +23,9 @@
 # SOFTWARE.
 #
 #
+# The language used in my comments are in keeping with RFC-2119.
+#
+#
 # Class to implement the Curious Electric DC Power Monitor ISL28022 in
 # Python. The ISL28022 data sheet can be found here:
 #  https://www.renesas.com/us/en/document/dst/isl28022-datasheet
@@ -43,6 +46,12 @@
 #
 #
 # $Log: ISL28022.py,v $
+# Revision 1.10  2023/01/13 08:39:29  root
+# Added a "debug" parameter to several functions.
+#
+# Revision 1.9  2023/01/13 07:47:02  root
+# Documentation changes.
+#
 # Revision 1.8  2023/01/13 07:40:37  root
 # Equation variable values I used in _CurrentLSB and _CalRegVal were
 # reversed. This resulted in Current instability. There MAY still be
@@ -75,7 +84,7 @@
 # Initial revision
 #
 
-ident = "$Id: ISL28022.py,v 1.8 2023/01/13 07:40:37 root Exp root $"
+ident = "$Id: ISL28022.py,v 1.10 2023/01/13 08:39:29 root Exp root $"
 
 
 import board
@@ -570,7 +579,7 @@ class ISL28022( object ):
         return ( self._config & 0b0000000000000111 )
 
     
-    def shunt_voltage( self ):
+    def shunt_voltage( self, debug=False ):
 
         _rbuf = self._readreg16( self._register_shunt_voltage )
         _int  = self._buf_to_int( _rbuf )
@@ -579,17 +588,15 @@ class ISL28022( object ):
         assert _bits in [ 12, 13, 14, 15 ], "Bus voltage bits: {:}".format ( _bits )
 
         _vShunt = self._twos_complement16( _int, _bits )
-                
-        if self._debug:
-            print( "shunt_voltage():" )
-            print( " bits:", _bits )
-            print( " scale:", self._shunt_voltage )
-            print( " rbuf:", _rbuf, "_int:", hex( _int ))
+        _ret = float( _vShunt ) * 0.000010
+        
+        if self._debug or debug:
+            print( "Shunt voltage: _rbuf=", _rbuf, "_int=", hex( _int ), "_bits=", _bits, "_ret=", _ret )
 
-        return float( _vShunt ) * 0.000010 
+        return _ret
 
 
-    def bus_voltage( self ):
+    def bus_voltage( self, debug=False ):
 
         _rbuf = self._readreg16( self._register_bus_voltage )
         _int  = self._buf_to_int( _rbuf )
@@ -599,28 +606,25 @@ class ISL28022( object ):
             print( "Bus voltage overflow" )
     
         # There is no sign bit for the bus voltage.
-        _vBus = 0
+        _ret = 0
     
         assert _bits in [ 12, 13, 14 ], "Bus voltage bits: {:}".format ( _bits )
         
         if _bits == 12:
-            _vBus = ( _int & 0b0111111111111000 ) >> 3
+            _ret = ( _int & 0b0111111111111000 ) >> 3
         if _bits == 13:
-            _vBus = ( _int & 0b1111111111111000 ) >> 3
+            _ret = ( _int & 0b1111111111111000 ) >> 3
         if _bits == 14:
-            _vBus = ( _int & 0b1111111111111100 ) >> 2
-        _vBus *= self._VbusLSB
+            _ret = ( _int & 0b1111111111111100 ) >> 2
+        _ret *= self._VbusLSB
 
-        if self._debug:
-            print( "bus_voltage():" )
-            print( " bits:", _bits )
-            print( " scale:", self._bus_voltage )
-            print( " rbuf:", _rbuf, "_int:", hex( _int ))
+        if self._debug or debug:
+            print( "Bus voltage: _rbuf=", _rbuf, "_int=", hex( _int ), "_bits=", _bits, "_ret=", _ret )
 
-        return _vBus
+        return _ret
 
     
-    def power( self ):
+    def power( self, debug=False ):
 
         _rbuf = self._readreg16( self._register_power )
         _int  = self._buf_to_int( _rbuf )
@@ -631,17 +635,26 @@ class ISL28022( object ):
             if _int & self._pow_table16[ n ]:
                 _p += self._pow_table16[ n ]
 
-        return float( _p ) * self._CurrentLSB * self._VbusLSB * 5000.0
+        _ret = float( _p ) * self._CurrentLSB * self._VbusLSB * 5000.0
+
+        if self._debug or debug:
+            print( "Power: _rbuf=", _rbuf, "_int=", hex( _int ), "_p=", _p, "_ret=", _ret )
+            
+        return _ret
     
 
-    def current( self ):
+    def current( self, debug=False ):
 
         _rbuf = self._readreg16( self._register_current )
         _int  = self._buf_to_int( _rbuf )
 
         _c = self._twos_complement16( _int, 15 )
- 
-        return float( _c ) * self._CurrentLSB
+        _ret = float( _c ) * self._CurrentLSB
+        
+        if self._debug or debug:
+            print( "Current: _ruf=", _rbuf, "_int=", hex( _int ), "_c=", _c, "_ret=", _ret )
+            
+        return _ret
 
     
     # Diagnostic, mostly.
