@@ -46,8 +46,13 @@
 #
 #
 # $Log: ISL28022.py,v $
+# Revision 1.11  2023/01/13 21:14:40  root
+# Current calc was off by 1,000. Resistor spec is in *milli* Ohms.
+#
 # Revision 1.10  2023/01/13 08:39:29  root
-# Added a "debug" parameter to several functions.
+# Added a "debug" parameter to several functions independent of the
+# class debug flag. This was done to reduce the overall debug output
+# noise so to focus a debugging effort.
 #
 # Revision 1.9  2023/01/13 07:47:02  root
 # Documentation changes.
@@ -84,7 +89,7 @@
 # Initial revision
 #
 
-ident = "$Id: ISL28022.py,v 1.10 2023/01/13 08:39:29 root Exp root $"
+ident = "$Id: ISL28022.py,v 1.11 2023/01/13 21:14:40 root Exp root $"
 
 
 import board
@@ -101,8 +106,8 @@ class ISL28022( object ):
                   full_scale=16,
                   # Voltage across the shunt.
                   shunt_voltage=0.320,
-                  # Shunt resistor in Ohms. 
-                  shunt_resistor=0.005,
+                  # Shunt resistor in mOhms ( i.e., milli Ohms). 
+                  shunt_resistor=5.0,
                   # Bus A/D averaging. Averaging of "0" means no
                   # averaging.
                   bavg=0,
@@ -226,7 +231,7 @@ class ISL28022( object ):
 
         if self._debug:
             print( " Shunt Voltage:", self._shunt_voltage, "\n",
-                   "Shunt Resistence:", self._shunt_r, "\n",
+                   "Shunt Resistence:", self._shunt_r, " (mOhm)\n",
                    "CurrentFS:", self._CurrentFS, "\n",
                    "CurrentLSB:", self._CurrentLSB, "\n",
                    "CalRegVal:", self._calib, "hex:", hex( self._calib ))
