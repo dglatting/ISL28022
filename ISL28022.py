@@ -55,6 +55,9 @@
 # rather than git. RCS is "old school," as am I.
 #
 # $Log: ISL28022.py,v $
+# Revision 1.17  2023/01/16 08:01:00  root
+# Forgot to fix some print statements.
+#
 # Revision 1.16  2023/01/16 07:54:31  root
 # Fixed a fundamental spec/math problem when we're dealing with mV/V
 # and Ohm/mOhm. This will fix current & power calc.
@@ -124,7 +127,7 @@
 # Initial revision
 #
 
-ident = "$Id: ISL28022.py,v 1.16 2023/01/16 07:54:31 root Exp root $"
+ident = "$Id: ISL28022.py,v 1.17 2023/01/16 08:01:00 root Exp root $"
 
 
 import board
@@ -264,11 +267,10 @@ class ISL28022( object ):
         self._CurrentLSB = self._CurrentFS / math.pow( 2, self._resolution( "PG" ))
         self._CalRegVal  = ( math.pow( 2, 12 ) * 0.000010 ) / ( self._CurrentLSB * self._mOhm2Ohm( self._shunt_r ))
 
-        print( "CurrentFS:  %.6f" % self._CurrentFS )
-        print( "CurrentLSB: %.6f" % self._CurrentLSB )
-        print( "CalRegVal:  %.6f" % self._CalRegVal )
-
-        print( math.pow( 2, 12 ) * 0.000010, self._shunt_r )
+        if self._debug:
+            print( "CurrentFS:  %.6f" % self._CurrentFS )
+            print( "CurrentLSB: %.6f" % self._CurrentLSB )
+            print( "CalRegVal:  %.6f" % self._CalRegVal )
         
         self._calib = ( int( self._CalRegVal ) & 0xfffe )
 
@@ -751,7 +753,7 @@ class ISL28022( object ):
         _ret = float( _c ) * self._CurrentLSB
         
         if self._debug or debug:
-            print( "Current: _ruf=", _rbuf, "_int=", hex( _int ), "_c=", _c, "_ret=", _ret, "fake:", ((( _int / 32768.0) * 320.0 ) * 5.0 ))
+            print( "Current: _ruf=", _rbuf, "_int=", hex( _int ), "_c=", _c, "_ret=", _ret )
 
         return _ret
 
