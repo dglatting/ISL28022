@@ -1,6 +1,6 @@
 # !/usr/bin/python3
 #
-# Copyright (c) 2023 Dennis Glatting, dennis.glatting@gmail.com
+# Copyright (c) 2023 Dennis Glatting
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation files
@@ -55,6 +55,21 @@
 # rather than git. RCS is "old school," as am I.
 #
 # $Log: ISL28022.py,v $
+# Revision 1.16  2023/01/16 07:54:31  root
+# Fixed a fundamental spec/math problem when we're dealing with mV/V
+# and Ohm/mOhm. This will fix current & power calc.
+#
+# Revision 1.15  2023/01/16 06:48:57  root
+# * Changed the debug flag to be a value than a boolean to create
+#   levels of debug info.
+# * Defined the shunt and bus voltages as a float to avoid later
+#   casting.
+# * Changed "address" to "addr" to be more consistent with other IoT
+#   code.
+# * Added a "pretty" print for the configuration register to made it's
+#   debug more useful.
+# * Commented out the main test loop.
+#
 # Revision 1.14  2023/01/13 22:10:49  root
 # * Updates to comments.
 # * Moved the delay loop in main().
@@ -109,7 +124,7 @@
 # Initial revision
 #
 
-ident = "$Id: ISL28022.py,v 1.14 2023/01/13 22:10:49 root Exp root $"
+ident = "$Id: ISL28022.py,v 1.16 2023/01/16 07:54:31 root Exp root $"
 
 
 import board
@@ -120,12 +135,12 @@ import time
 class ISL28022( object ):
 
     def __init__( self, i2c, # i2c bus address.
-                  address=0x40,
+                  addr=0x40,
                   # Full scale bus voltage: 16, 32, or 64v (there's a
                   # quiz later).
-                  full_scale=16,
-                  # Voltage across the shunt.
-                  shunt_voltage=0.320,
+                  full_scale=16.0,
+                  # Voltage across the shunt in mV (i.e., milli Volts).
+                  shunt_voltage=320.0,
                   # Shunt resistor in mOhms (i.e., milli Ohms). 
                   shunt_resistor=5.0,
                   # Bus A/D averaging. Averaging of "0" means no
@@ -146,7 +161,7 @@ class ISL28022( object ):
         
         # Remember init values.
         self._i2c           = i2c
-        self._addr          = address
+        self._addr          = addr
         self._calib         = 0
         self._bus_voltage   = full_scale
         self._shunt_voltage = shunt_voltage
@@ -154,7 +169,7 @@ class ISL28022( object ):
         self._bavg          = bavg
         self._savg          = savg
         self._debug         = debug
-
+        
         # The device's registers (TABLE 2).
         #  (Please give me c++ static const)
         self._register_config                  = 0x00
@@ -208,8 +223,8 @@ class ISL28022( object ):
                               0b1000000000000000 ]
         
         # Checks
-        assert self._bus_voltage in [ 16, 32, 60 ], "Full scale range set error"
-        assert self._shunt_voltage in [ 0.040, 0.080, 0.160, 0.320 ], "Shunt voltage set error"
+        assert self._bus_voltage in [ 16.0, 32.0, 60.0 ], "Full scale range set error"
+        assert self._shunt_voltage in [ 40.0, 80.0, 160.0, 320.0 ], "Shunt voltage set error"
         assert self._bavg in [ 0, 1, 2, 4, 8, 16, 32, 64, 128 ], "Bus averaging set error"
         assert self._savg in [ 0, 1, 2, 4, 8, 16, 32, 64, 128 ], "Shunt averaging set error"
         assert not( mode & ~0b111 ), "Excess mode bits"
@@ -241,29 +256,39 @@ class ISL28022( object ):
                            (( self._config & 0xff00 ) >> 8 ),
                             ( self._config & 0x00ff )])
         self._write( _buf )
+        if self._debug:
+            print( "Configuration reg: {0} ({1})".format( _buf, self._pretty_print_config()))
 	
         # Calculate the calibration values and store them away.
-        self._CurrentFS  = self._shunt_voltage / self._shunt_r
+        self._CurrentFS  = self._mV2V( self._shunt_voltage ) / self._mOhm2Ohm( self._shunt_r )
         self._CurrentLSB = self._CurrentFS / math.pow( 2, self._resolution( "PG" ))
-        self._CalRegVal  = ( math.pow( 2, 12 ) * 0.000010 ) / ( self._CurrentLSB * self._shunt_r )
+        self._CalRegVal  = ( math.pow( 2, 12 ) * 0.000010 ) / ( self._CurrentLSB * self._mOhm2Ohm( self._shunt_r ))
 
+        print( "CurrentFS:  %.6f" % self._CurrentFS )
+        print( "CurrentLSB: %.6f" % self._CurrentLSB )
+        print( "CalRegVal:  %.6f" % self._CalRegVal )
+
+        print( math.pow( 2, 12 ) * 0.000010, self._shunt_r )
+        
         self._calib = ( int( self._CalRegVal ) & 0xfffe )
 
         if self._debug:
-            print( " Shunt Voltage:", self._shunt_voltage, "\n",
+            print( " Shunt Voltage:", self._shunt_voltage, "(mV)\n",
                    "Shunt Resistence:", self._shunt_r, " (mOhm)\n",
                    "CurrentFS:", self._CurrentFS, "\n",
                    "CurrentLSB:", self._CurrentLSB, "\n",
                    "CalRegVal:", self._calib, "hex:", hex( self._calib ))
 
-        self._VbusLSB = 0.004
+        # Electrical Spec: Vbus_step.
+        self._VbusLSB = 0.004 # Volts
         
         # Write the calibration to the device.
         _buf = bytearray([ self._register_calibration,
                            (( self._calib & 0xff00 ) >> 8 ),
                             ( self._calib & 0x00ff )])
         self._write( _buf )
-
+        if self._debug:
+            print( "Calibration reg:", _buf )
 
     def _determine_configuration_register( self ):
 
@@ -275,16 +300,16 @@ class ISL28022( object ):
         
         _cfg = self.modes()
 
-        if self._bus_voltage == 32:
+        if self._bus_voltage == 32.0:
             _cfg |= self._config_bits[ "BRNG0" ]
-        if self._bus_voltage == 60:
+        if self._bus_voltage == 60.0:
             _cfg |= self._config_bits[ "BRNG1" ]
 
-        if self._shunt_voltage == 0.080:
+        if self._shunt_voltage == 80.0:
             _cfg |= self._config_bits[ "PG0" ]
-        if self._shunt_voltage == 0.160:
+        if self._shunt_voltage == 160.0:
             _cfg |= self._config_bits[ "PG1" ]
-        if self._shunt_voltage == 0.320:
+        if self._shunt_voltage == 320.0:
             _cfg |= self._config_bits[ "PG0" ]
             _cfg |= self._config_bits[ "PG1" ]
 
@@ -292,11 +317,11 @@ class ISL28022( object ):
             # The resolution for the bus voltage is either 12, 13, or
             # 14 bits. A resolution of 15 bits is not supported by the
             # device. See documentation Tables 12, 13, and 14.
-            if self._bus_voltage == 60: # 14 bits
+            if self._bus_voltage == 60.0: # 14 bits
                 _cfg |= self._config_bits[ "BADC1"]
-            if self._bus_voltage == 32: # 13 bits
+            if self._bus_voltage == 32.0: # 13 bits
                 _cfg |= self._config_bits[ "BADC0"]
-            if self._bus_voltage == 16: # 12 bits
+            if self._bus_voltage == 16.0: # 12 bits
                 pass
         else:
             _cfg |= self._config_bits[ "BADC3" ]
@@ -325,12 +350,12 @@ class ISL28022( object ):
         if self._savg == 0:
             # The resolution for the shunt voltage is either 13, 14,
             # or 15 bits. See documentation Tables 8, 9, 10, and 11.
-            if self._shunt_voltage == 0.320: # 15 bits
+            if self._shunt_voltage == 320.0: # 15 bits
                 _cfg |= self._config_bits[ "SADC0"]
                 _cfg |= self._config_bits[ "SADC1"]
-            if self._shunt_voltage == 0.160: # 14 bits
+            if self._shunt_voltage == 160.0: # 14 bits
                 _cfg |= self._config_bits[ "SADC1"]
-            if self._shunt_voltage == 0.080: # 13 bits
+            if self._shunt_voltage == 80.0: # 13 bits
                 _cfg |= self._config_bits[ "SADC0"]
         else:
             _cfg |= self._config_bits[ "SADC3" ]
@@ -465,7 +490,6 @@ class ISL28022( object ):
 
         return _delay
 
-    
     def _mask( self, flags ):
 
         # Weird wacky masking of the configuration register
@@ -493,7 +517,7 @@ class ISL28022( object ):
     
     def _write( self, buf ):
 
-        if self._debug:
+        if self._debug > 1:
             print( "write:", buf, ' ', end='' )
 
         assert self._i2c.try_lock(), "The i2c bus should not be locked"
@@ -502,7 +526,7 @@ class ISL28022( object ):
 
         self._i2c.unlock()
         
-        if self._debug:
+        if self._debug > 1:
             print( "nacks:", _nacks )
 
             
@@ -513,7 +537,7 @@ class ISL28022( object ):
         _wbuf = bytearray([ reg ])
         _rbuf = bytearray( 2 )
 
-        if self._debug:
+        if self._debug > 1:
             print( "readreg16 w:", _wbuf, ' ', end='' )
 
         assert self._i2c.try_lock(), "The i2c bus should not be locked"
@@ -524,11 +548,10 @@ class ISL28022( object ):
 
         assert len( _rbuf ) == 2, "16 bits not returned from reg: {:}".format( reg )
 
-        if self._debug:
+        if self._debug > 1:
             print( "r:", _rbuf, "ret:", _ret )
             
         return _rbuf
-
 
     def _twos_complement16( self, val16, bits ):
 
@@ -553,6 +576,56 @@ class ISL28022( object ):
 
         return _v
 
+    def _pretty_print_config( self ):
+
+        # It is a pain to look at the 16bit configuration register in
+        # hex when it's meaningful in another format.
+        
+        _ret = ""
+
+        _ret += self._zero_or_one( self._config & self._config_bits[ "RST" ]) 
+        _ret += " "
+
+        _ret += self._zero_or_one( self._config & self._config_bits[ "BRNG1" ])
+        _ret +=	self._zero_or_one( self._config & self._config_bits[ "BRNG0" ])
+        _ret +=	" "
+
+        _ret +=	self._zero_or_one( self._config & self._config_bits[ "PG1" ])
+        _ret += self._zero_or_one( self._config & self._config_bits[ "PG0" ])
+        _ret += " "
+
+        _ret += self._zero_or_one( self._config & self._config_bits[ "BADC3" ])
+        _ret +=	self._zero_or_one( self._config & self._config_bits[ "BADC2" ])
+        _ret +=	self._zero_or_one( self._config & self._config_bits[ "BADC1" ])
+        _ret +=	self._zero_or_one( self._config & self._config_bits[ "BADC0" ])
+        _ret += " "
+
+        _ret +=	self._zero_or_one( self._config & self._config_bits[ "SADC3" ])
+        _ret += self._zero_or_one( self._config & self._config_bits[ "SADC2" ])
+        _ret += self._zero_or_one( self._config & self._config_bits[ "SADC1" ])
+        _ret += self._zero_or_one( self._config & self._config_bits[ "SADC0" ])
+        _ret += " "
+
+        _ret += self._zero_or_one( self._config & self._config_bits[ "MODE2" ])
+        _ret += self._zero_or_one( self._config & self._config_bits[ "MODE1" ])
+        _ret += self._zero_or_one( self._config & self._config_bits[ "MODE0" ])
+
+        return _ret
+
+    def _mOhm2Ohm( self, mOhm ):
+
+        return float( mOhm ) / 1000.0
+
+    def _mV2V( self, mV ):
+
+        return float( mV ) / 1000.0
+
+    def _zero_or_one( self, bit ):
+
+        if bit:
+            return "1"
+        else:
+            return "0"
         
     def initialization_delay( self ):
 
@@ -612,6 +685,7 @@ class ISL28022( object ):
         
         assert _bits in [ 12, 13, 14, 15 ], "Bus voltage bits: {:}".format ( _bits )
 
+        # Electrical spec: Vshunt_step
         _vShunt = self._twos_complement16( _int, _bits )
         _ret = float( _vShunt ) * 0.000010
         
@@ -677,8 +751,8 @@ class ISL28022( object ):
         _ret = float( _c ) * self._CurrentLSB
         
         if self._debug or debug:
-            print( "Current: _ruf=", _rbuf, "_int=", hex( _int ), "_c=", _c, "_ret=", _ret )
-            
+            print( "Current: _ruf=", _rbuf, "_int=", hex( _int ), "_c=", _c, "_ret=", _ret, "fake:", ((( _int / 32768.0) * 320.0 ) * 5.0 ))
+
         return _ret
 
     
@@ -707,31 +781,31 @@ isl = ISL28022( i2c, bavg=8 )
 
 
 
-print( ident )
-print()
-
-# A pause for the cause.
-print( "Initialization delay: %.6f us" % isl.initialization_delay())
-print( "Bus conversion delay: %.6f us" % isl.bus_conversion_delay())
-print()
-
-time.sleep( isl.initialization_delay())
-
-
-while True:
-
-    print( "Bus Voltage:   %+2.4f" % isl.bus_voltage())
-    print( "Shunt Voltage: %+2.4f" % isl.shunt_voltage())
-    print( "Current:       %+2.4f" % isl.current())
-    print( "Power:         %+2.4f" % isl.power())
-    print()
+#print( ident )
+#print()
+#
+## A pause for the cause.
+#print( "Initialization delay: %.6f us" % isl.initialization_delay())
+#print( "Bus conversion delay: %.6f us" % isl.bus_conversion_delay())
+#print()
+#
+#time.sleep( isl.initialization_delay())
+#
+#
+#while True:
+#
+#    print( "Bus Voltage:   %+2.4f" % isl.bus_voltage())
+#    print( "Shunt Voltage: %+2.4f" % isl.shunt_voltage())
+#    print( "Current:       %+2.4f" % isl.current())
+#    print( "Power:         %+2.4f" % isl.power())
+#    print()
+#    
+#    isl.other_regs()
+#    print()
+#
+#    time.sleep( max( isl.bus_conversion_delay(),
+#                     isl.shunt_conversion_delay(), 0.100 ))
     
-    isl.other_regs()
-    print()
-
-    time.sleep( max( isl.bus_conversion_delay(),
-                     isl.shunt_conversion_delay(), 0.100 ))
-    
 
 
-#  LocalWords:  busio Adafruit blinka MSB LSB IoT
+#  LocalWords:  busio Adafruit blinka MSB LSB IoT mOhm
